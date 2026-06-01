@@ -1,0 +1,10 @@
+logs/
+data/*.db
+data/*.sqlite3
+!data/.gitkeep
+.venv/
+__pycache__/
+*.pyc
+.env
+credentials/*.json
+!credentials/.gitkeep
