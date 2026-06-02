@@ -51,7 +51,10 @@ def collect_asset_keys(ranking: list[dict[str, Any]]) -> list[str]:
 
 
 def _parse_world_id(payload: dict[str, Any]) -> str:
-    common = payload.get("common")
+    character = payload.get("character")
+    if not isinstance(character, dict):
+        return ""
+    common = character.get("common")
     if not isinstance(common, dict):
         return ""
     world_id = str(common.get("worldId", "")).strip()
@@ -99,7 +102,11 @@ def sync_world_ids(
     pending = [
         key
         for key in asset_keys
-        if key and (not skip_existing or not existing.get(key))
+        if key
+        and (
+            not skip_existing
+            or not str(existing.get(key, "")).strip()
+        )
     ]
     skipped = len(asset_keys) - len(pending)
 
