@@ -1,4 +1,4 @@
-import { canonicalJobName } from "./jobCategories";
+import { canonicalJobName, lookupLiteralJob } from "./jobCategories";
 
 export const GAIN_PERIOD_LABELS = {
   daily: "日間",
@@ -41,6 +41,9 @@ const JOB_DISPLAY_BY_BASE = {
   THUNDERBREAKER: "Thunder Breaker",
   STRIKER: "Thunder Breaker",
   MIHILE: "Mihile",
+  MIKHAEL: "Mihile",
+  MIKAEL: "Mihile",
+  MICHAEL: "Mihile",
 };
 
 /** Normalize API / JSON job label to display name (e.g. Eunwol4 → Shade). */
@@ -49,6 +52,10 @@ export function formatJobName(job) {
     return "Unknown";
   }
   const raw = String(job).trim();
+  const literal = lookupLiteralJob(raw);
+  if (literal) {
+    return literal;
+  }
   const baseKey = raw
     .replace(/^JobCode_/i, "")
     .toUpperCase()
@@ -63,7 +70,8 @@ export function formatJobName(job) {
     .replace(/^JobCode_/i, "")
     .replace(/\d+$/, "")
     .replace(/_/g, " ");
-  return stripped.replace(/\b\w/g, (ch) => ch.toUpperCase());
+  const titled = stripped.replace(/\b\w/g, (ch) => ch.toUpperCase());
+  return lookupLiteralJob(titled) ?? canonicalJobName(titled);
 }
 
 export function formatExp(value) {

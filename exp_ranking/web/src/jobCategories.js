@@ -8,6 +8,34 @@ function normalizeJobKey(name) {
 
 const ARCH_MAGE_FIRE_POISON = "Arch Mage(Fire / Poison)";
 const ARCH_MAGE_ICE_LIGHTNING = "Arch Mage(Ice / Lightning)";
+const MIHILE = "Mihile";
+
+/** Exact API / client strings → canonical job (incl. non-ASCII). */
+const JOB_LITERAL_ALIASES = {
+  ミハエル: MIHILE,
+  ミハイル: MIHILE,
+  Mikhael: MIHILE,
+  Mikhail: MIHILE,
+  Michael: MIHILE,
+  Mihael: MIHILE,
+};
+
+function lookupLiteralJob(name) {
+  const raw = String(name || "").trim();
+  if (!raw) {
+    return null;
+  }
+  if (JOB_LITERAL_ALIASES[raw]) {
+    return JOB_LITERAL_ALIASES[raw];
+  }
+  const lower = raw.toLowerCase();
+  for (const [alias, canonical] of Object.entries(JOB_LITERAL_ALIASES)) {
+    if (alias.toLowerCase() === lower) {
+      return canonical;
+    }
+  }
+  return null;
+}
 
 /** Explorer → branch → canonical display names (order preserved). */
 const ADVENTURER_BRANCHES = [
@@ -41,7 +69,7 @@ const CYGNUS_JOBS = [
   "Wind Archer",
   "Night Walker",
   "Thunder Breaker",
-  "Mihile",
+  MIHILE,
 ];
 
 /** API / formatJobName variants → canonical job name */
@@ -90,7 +118,12 @@ const JOB_KEY_ALIASES = {
   windbreaker: "Wind Archer",
   thunderbreaker: "Thunder Breaker",
   striker: "Thunder Breaker",
-  mihile: "Mihile",
+  mihile: MIHILE,
+  mikhael: MIHILE,
+  mikael: MIHILE,
+  mikhail: MIHILE,
+  michael: MIHILE,
+  mihael: MIHILE,
 };
 
 const JOB_CATEGORY_LOOKUP = new Map();
@@ -133,6 +166,10 @@ export const JOB_TAXONOMY = [
 export const JOB_ALLIANCES = JOB_TAXONOMY.map((entry) => entry.alliance);
 
 export function classifyJob(displayJobName) {
+  const literal = lookupLiteralJob(displayJobName);
+  if (literal) {
+    return JOB_CATEGORY_LOOKUP.get(normalizeJobKey(literal)) ?? null;
+  }
   const key = normalizeJobKey(displayJobName);
   const alias = JOB_KEY_ALIASES[key];
   const lookupKey = alias ? normalizeJobKey(alias) : key;
@@ -140,8 +177,14 @@ export function classifyJob(displayJobName) {
 }
 
 export function canonicalJobName(displayJobName) {
-  return classifyJob(displayJobName)?.job ?? displayJobName;
+  return (
+    lookupLiteralJob(displayJobName) ??
+    classifyJob(displayJobName)?.job ??
+    displayJobName
+  );
 }
+
+export { lookupLiteralJob };
 
 /** Arrange flat per-job ranking groups into alliance → branch → jobs. */
 export function categorizeJobRankings(flatGroups) {

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Trophy, CalendarDays, Star } from "lucide-react";
+import { Search, Star } from "lucide-react";
 import CharacterDetail from "./CharacterDetail";
 import FavoriteStar from "./FavoriteStar";
 import TopGainHighlights from "./TopGainHighlights";
@@ -46,7 +46,7 @@ const FALLBACK_EXP_TABLE = {
   249: 1983267496351,
 };
 
-const PAGE_SIZE = 30;
+const PAGE_SIZE = 20;
 
 const SORT_OPTIONS = [
   { key: "rank", label: "レベル順位" },
@@ -223,18 +223,6 @@ export default function App() {
           <div>
             <p className="text-sm text-slate-400">MapleStory N</p>
             <h1 className="text-3xl md:text-5xl font-bold tracking-tight">EXP Ranking</h1>
-            <p className="text-slate-400 mt-2">
-              {[
-                meta.rankingMinLevel
-                  ? `Lv.${meta.rankingMinLevel}+`
-                  : meta.rankingTopN
-                    ? `取得 ${meta.rankingTopN} 人`
-                    : null,
-                meta.latestSnapshotDate ? `最新 ${meta.latestSnapshotDate}` : null,
-              ]
-                .filter(Boolean)
-                .join(" / ")}
-            </p>
             {meta.demoGains ? (
               <p className="text-amber-300 text-sm mt-1">
                 デモ用ダミー増加量データ（{meta.demoGainDays || "?"} 日分）
@@ -242,28 +230,18 @@ export default function App() {
             ) : null}
             {loadError ? <p className="text-amber-400 text-sm mt-1">{loadError}</p> : null}
           </div>
-          <div className="grid grid-cols-2 gap-3 w-full md:w-auto md:grid-cols-2">
-            <Card className="bg-slate-900 border border-slate-800 rounded-2xl">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-slate-400 text-sm">
-                  <Trophy size={16} />
-                  表示
-                </div>
-                <div className="text-2xl font-bold mt-1">
-                  {meta.characterCount || characters.length}
-                </div>
-              </CardContent>
-            </Card>
-            <Card className="bg-slate-900 border border-slate-800 rounded-2xl">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 text-slate-400 text-sm">
-                  <CalendarDays size={16} />
-                  履歴日数
-                </div>
-                <div className="text-2xl font-bold mt-1">{meta.snapshotDays || 0}</div>
-              </CardContent>
-            </Card>
-          </div>
+          <p className="text-slate-400 text-sm md:text-base text-right md:pb-1 shrink-0">
+            {[
+              meta.rankingMinLevel
+                ? `Lv.${meta.rankingMinLevel}+`
+                : meta.rankingTopN
+                  ? `取得 ${meta.rankingTopN} 人`
+                  : null,
+              meta.latestSnapshotDate ? `最新 ${meta.latestSnapshotDate}` : null,
+            ]
+              .filter(Boolean)
+              .join(" / ")}
+          </p>
         </div>
 
         <TopGainHighlights

@@ -208,7 +208,7 @@ export default function CharacterDetail({
           <div className="bg-slate-950 rounded-2xl p-4">
             <div className="text-slate-400 text-sm">デイリー増加 過去最高</div>
             <div className="text-2xl font-bold text-amber-300 mt-1">
-              +{formatExp(bestDaily.bestGain)}
+              +{formatExpExact(bestDaily.bestGain)}
             </div>
             <p className="text-xs text-slate-500 mt-2">
               {bestDaily.bestDate ? `記録日 ${bestDaily.bestDate}` : "データなし"}

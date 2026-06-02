@@ -40,6 +40,18 @@ JOB_DISPLAY_BY_BASE: dict[str, str] = {
     "THUNDERBREAKER": "Thunder Breaker",
     "STRIKER": "Thunder Breaker",
     "MIHILE": "Mihile",
+    "MIKHAEL": "Mihile",
+    "MIKAEL": "Mihile",
+    "MICHAEL": "Mihile",
+}
+
+JOB_LITERAL_ALIASES: dict[str, str] = {
+    "ミハエル": "Mihile",
+    "ミハイル": "Mihile",
+    "Mikhael": "Mihile",
+    "Mikhail": "Mihile",
+    "Michael": "Mihile",
+    "Mihael": "Mihile",
 }
 
 
@@ -54,6 +66,14 @@ def normalize_job_key(job_code: str) -> str:
 def format_job_name(job_code: str) -> str:
     if not job_code or not job_code.strip():
         return "Unknown"
+
+    text = job_code.strip()
+    if text in JOB_LITERAL_ALIASES:
+        return JOB_LITERAL_ALIASES[text]
+    lower = text.lower()
+    for alias, canonical in JOB_LITERAL_ALIASES.items():
+        if alias.lower() == lower:
+            return canonical
 
     base_key = normalize_job_key(job_code)
     if base_key in JOB_DISPLAY_BY_BASE:
