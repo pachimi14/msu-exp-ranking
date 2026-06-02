@@ -6,6 +6,30 @@ export const GAIN_PERIOD_LABELS = {
   monthly: "月間",
 };
 
+export const WORLD_IDS = ["Ain", "Errai", "Fang"];
+
+export function characterWorldId(character) {
+  return character?.worldId?.trim() || "";
+}
+
+export function getNavigatorUrl(character) {
+  if (character?.navigatorUrl) {
+    return character.navigatorUrl;
+  }
+  const key = character?.characterAssetKey?.trim();
+  if (!key) {
+    return null;
+  }
+  return `https://msu.io/navigator/character/${encodeURIComponent(key)}`;
+}
+
+export function matchesWorldFilter(character, worldFilter) {
+  if (!worldFilter || worldFilter === "all") {
+    return true;
+  }
+  return characterWorldId(character) === worldFilter;
+}
+
 const JOB_DISPLAY_BY_BASE = {
   HERO: "Hero",
   PALADIN: "Paladin",

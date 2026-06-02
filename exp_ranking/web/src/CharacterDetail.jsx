@@ -2,6 +2,7 @@ import React, { useMemo } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { UserRound } from "lucide-react";
 import FavoriteStar from "./FavoriteStar";
+import NavigatorLink from "./NavigatorLink";
 import {
   BarChart,
   Bar,
@@ -27,6 +28,7 @@ import {
   getGainRank,
   formatJobName,
   getGainAmount,
+  getNavigatorUrl,
   lastHistoryPoints,
   levelExpPercent,
 } from "./rankingUtils";
@@ -125,6 +127,7 @@ export default function CharacterDetail({
   const level = character.level ?? 0;
   const expPercent = levelExpPercent(character);
   const levelExp = currentLevelExp(character, expTable);
+  const navigatorUrl = getNavigatorUrl(character);
 
   return (
     <Card className="bg-slate-900 border border-slate-800 rounded-2xl shadow-xl w-full">
@@ -146,11 +149,23 @@ export default function CharacterDetail({
               ) : null}
             </div>
             <h2 className="text-2xl font-bold break-words leading-tight mt-1">
-              {character.name}
+              <NavigatorLink href={navigatorUrl} className="text-inherit hover:text-sky-300">
+                {character.name}
+              </NavigatorLink>
             </h2>
 
             <div className="flex items-baseline justify-between gap-3 mt-2">
-              <p className="text-slate-400 min-w-0">{formatJobName(character.job)}</p>
+              <p className="text-slate-400 min-w-0">
+                {formatJobName(character.job)}
+                {character.worldId ? (
+                  <>
+                    <span className="text-slate-600"> · </span>
+                    <NavigatorLink href={navigatorUrl} className="text-sky-400 font-medium">
+                      {character.worldId}
+                    </NavigatorLink>
+                  </>
+                ) : null}
+              </p>
               <p className="shrink-0 text-right tabular-nums font-bold text-lg whitespace-nowrap">
                 Lv.{level}
                 {level >= 250 ? (

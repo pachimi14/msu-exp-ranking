@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS ranking_snapshot (
     level INTEGER NOT NULL,
     exp INTEGER NOT NULL,
     image_url TEXT NOT NULL DEFAULT '',
+    character_asset_key TEXT NOT NULL DEFAULT '',
     fetched_at TEXT NOT NULL,
     UNIQUE(snapshot_date, rank)
 );
@@ -31,13 +32,36 @@ CREATE INDEX IF NOT EXISTS idx_ranking_snapshot_date
 
 CREATE INDEX IF NOT EXISTS idx_ranking_snapshot_character
     ON ranking_snapshot(character_name);
+
+CREATE TABLE IF NOT EXISTS character_meta (
+    character_asset_key TEXT PRIMARY KEY,
+    world_id TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL
+);
 """
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {str(row[1]) for row in rows}
+
+
+def _migrate_schema(conn: sqlite3.Connection) -> None:
+    snapshot_columns = _table_columns(conn, "ranking_snapshot")
+    if "character_asset_key" not in snapshot_columns:
+        conn.execute(
+            """
+            ALTER TABLE ranking_snapshot
+            ADD COLUMN character_asset_key TEXT NOT NULL DEFAULT ''
+            """
+        )
 
 
 def init_db(db_path: Path) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(db_path) as conn:
         conn.executescript(_SCHEMA)
+        _migrate_schema(conn)
         conn.commit()
 
 
@@ -56,8 +80,9 @@ def append_snapshots(
                 """
                 INSERT OR IGNORE INTO ranking_snapshot (
                     snapshot_date, rank, rank_fluctuation, character_name,
-                    class_code, job_code, level, exp, image_url, fetched_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    class_code, job_code, level, exp, image_url,
+                    character_asset_key, fetched_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     row.snapshot_date,
@@ -69,6 +94,7 @@ def append_snapshots(
                     row.level,
                     row.exp,
                     row.image_url,
+                    row.character_asset_key,
                     fetched_at,
                 ),
             )
@@ -98,7 +124,7 @@ def load_all_snapshots(db_path: Path) -> list[SnapshotRow]:
             """
             SELECT
                 snapshot_date, rank, rank_fluctuation, character_name,
-                class_code, job_code, level, exp, image_url
+                class_code, job_code, level, exp, image_url, character_asset_key
             FROM ranking_snapshot
             ORDER BY snapshot_date ASC, rank ASC
             """
@@ -115,9 +141,48 @@ def load_all_snapshots(db_path: Path) -> list[SnapshotRow]:
             level=int(row["level"]),
             exp=int(row["exp"]),
             image_url=str(row["image_url"]),
+            character_asset_key=str(row["character_asset_key"] or ""),
         )
         for row in rows
     ]
+
+
+def load_character_meta(db_path: Path) -> dict[str, str]:
+    if not db_path.exists():
+        return {}
+
+    init_db(db_path)
+    with sqlite3.connect(db_path) as conn:
+        rows = conn.execute(
+            """
+            SELECT character_asset_key, world_id
+            FROM character_meta
+            WHERE character_asset_key != ''
+            """
+        ).fetchall()
+
+    return {str(row[0]): str(row[1] or "") for row in rows}
+
+
+def upsert_character_meta(
+    db_path: Path,
+    character_asset_key: str,
+    world_id: str,
+    updated_at: str,
+) -> None:
+    init_db(db_path)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO character_meta (character_asset_key, world_id, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(character_asset_key) DO UPDATE SET
+                world_id = excluded.world_id,
+                updated_at = excluded.updated_at
+            """,
+            (character_asset_key, world_id, updated_at),
+        )
+        conn.commit()
 
 
 def count_snapshots(db_path: Path) -> int:

@@ -49,6 +49,15 @@ def ranking_request_delay_sec() -> float:
     return max(0.0, float(os.environ.get("RANKING_REQUEST_DELAY_SEC", "0.35")))
 
 
+def navigator_request_delay_sec() -> float:
+    return max(0.0, float(os.environ.get("NAVIGATOR_REQUEST_DELAY_SEC", "0.35")))
+
+
+def navigator_fetch_enabled() -> bool:
+    raw = os.environ.get("NAVIGATOR_FETCH_ENABLED", "true").strip().lower()
+    return raw not in ("0", "false", "no", "off")
+
+
 def sqlite_db_path() -> Path:
     default = str(BASE_DIR / "data" / "ranking.db")
     return env_path("SQLITE_DB_PATH", default)

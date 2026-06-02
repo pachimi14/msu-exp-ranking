@@ -8,6 +8,7 @@ import FavoriteStar from "./FavoriteStar";
 import TopGainHighlights from "./TopGainHighlights";
 import JobGainRankings from "./JobGainRankings";
 import { useFavorites } from "./useFavorites";
+import NavigatorLink from "./NavigatorLink";
 import {
   computeGainRankMaps,
   formatExp,
@@ -16,6 +17,9 @@ import {
   gainRankClass,
   GAIN_PERIOD_LABELS,
   getGainAmount,
+  getNavigatorUrl,
+  matchesWorldFilter,
+  WORLD_IDS,
 } from "./rankingUtils";
 
 const FALLBACK_EXP_TABLE = {
@@ -86,7 +90,13 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [worldFilter, setWorldFilter] = useState("all");
   const { favoriteCount, isFavorite, toggleFavorite } = useFavorites();
+
+  const worldOptions = useMemo(() => {
+    const fromMeta = Array.isArray(meta.worldIds) ? meta.worldIds : WORLD_IDS;
+    return ["all", ...fromMeta];
+  }, [meta.worldIds]);
 
   useEffect(() => {
     let cancelled = false;
@@ -129,11 +139,15 @@ export default function App() {
   const expTable = useMemo(() => parseExpTable(meta), [meta]);
 
   const rankingPool = useMemo(() => {
-    if (!favoritesOnly) {
-      return characters;
+    let pool = characters;
+    if (worldFilter !== "all") {
+      pool = pool.filter((character) => matchesWorldFilter(character, worldFilter));
     }
-    return characters.filter((character) => isFavorite(character));
-  }, [characters, favoritesOnly, isFavorite]);
+    if (!favoritesOnly) {
+      return pool;
+    }
+    return pool.filter((character) => isFavorite(character));
+  }, [characters, favoritesOnly, isFavorite, worldFilter]);
 
   const gainRankMaps = useMemo(() => computeGainRankMaps(rankingPool), [rankingPool]);
 
@@ -146,7 +160,8 @@ export default function App() {
     return rankingPool.filter((character) => {
       return (
         character.name.toLowerCase().includes(lowerQuery) ||
-        formatJobName(character.job).toLowerCase().includes(lowerQuery)
+        formatJobName(character.job).toLowerCase().includes(lowerQuery) ||
+        (character.worldId || "").toLowerCase().includes(lowerQuery)
       );
     });
   }, [rankingPool, query]);
@@ -170,7 +185,7 @@ export default function App() {
 
   useEffect(() => {
     setPage(1);
-  }, [query, sortKey, favoritesOnly, gainRankView, expandedJob]);
+  }, [query, sortKey, favoritesOnly, gainRankView, expandedJob, worldFilter]);
 
   useEffect(() => {
     if (favoritesOnly && selectedId && !rankingPool.some((c) => c.id === selectedId)) {
@@ -293,6 +308,18 @@ export default function App() {
           </div>
         ) : null}
 
+        <div className="flex flex-wrap gap-2">
+          {worldOptions.map((world) => (
+            <Button
+              key={world}
+              variant={worldFilter === world ? "default" : "outline"}
+              onClick={() => setWorldFilter(world)}
+            >
+              {world === "all" ? "全サーバー" : world}
+            </Button>
+          ))}
+        </div>
+
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 xl:items-start">
           <Card className="xl:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl shadow-xl">
             <CardContent className="p-5 space-y-4">
@@ -322,7 +349,7 @@ export default function App() {
                     <Input
                       value={query}
                       onChange={(event) => setQuery(event.target.value)}
-                      placeholder="キャラ名・職業で検索"
+                      placeholder="キャラ名・職業・サーバーで検索"
                       className="pl-10 bg-slate-950 border-slate-800 text-slate-100"
                     />
                   </div>
@@ -394,6 +421,7 @@ export default function App() {
                       ) : null}
                       <th className="text-left p-3">レベル順位</th>
                       <th className="text-left p-3">Character</th>
+                      <th className="text-left p-3">Server</th>
                       <th className="text-right p-3">Lv / EXP%</th>
                       <th className="text-right p-3">Daily</th>
                       <th className="text-right p-3">Weekly</th>
@@ -422,8 +450,27 @@ export default function App() {
                         ) : null}
                         <td className="p-3 font-bold text-slate-400">#{character.rank}</td>
                         <td className="p-3">
-                          <div className="font-semibold">{character.name}</div>
+                          <div className="font-semibold">
+                            <NavigatorLink
+                              href={getNavigatorUrl(character)}
+                              className="text-inherit hover:text-sky-300"
+                            >
+                              {character.name}
+                            </NavigatorLink>
+                          </div>
                           <div className="text-sm text-slate-400">{formatJobName(character.job)}</div>
+                        </td>
+                        <td className="p-3">
+                          {character.worldId ? (
+                            <NavigatorLink
+                              href={getNavigatorUrl(character)}
+                              className="text-sky-400 font-medium"
+                            >
+                              {character.worldId}
+                            </NavigatorLink>
+                          ) : (
+                            <span className="text-slate-600">-</span>
+                          )}
                         </td>
                         <td className="p-3 text-right font-medium">{formatLevelExp(character)}</td>
                         <td

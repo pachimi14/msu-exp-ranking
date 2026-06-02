@@ -15,6 +15,7 @@ SNAPSHOT_FIELDNAMES = [
     "level",
     "exp",
     "imageUrl",
+    "characterAssetKey",
 ]
 
 ANALYSIS_FIELDNAMES = [
@@ -42,6 +43,7 @@ class SnapshotRow:
     level: int
     exp: int
     image_url: str
+    character_asset_key: str = ""
 
     def as_row_values(self) -> list[Any]:
         return [
@@ -54,6 +56,7 @@ class SnapshotRow:
             self.level,
             self.exp,
             self.image_url,
+            self.character_asset_key,
         ]
 
 

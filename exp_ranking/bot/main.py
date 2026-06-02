@@ -19,10 +19,12 @@ import config
 from analysis import build_analysis_rows
 from models import SnapshotRow
 from mvp_export import export_mvp_json, filter_snapshots_for_history
+from navigator import collect_asset_keys, extract_asset_key, sync_world_ids
 from sqlite_storage import (
     append_snapshots,
     delete_snapshots_before,
     load_all_snapshots,
+    load_character_meta,
 )
 from utils import normalize_int
 
@@ -266,6 +268,7 @@ def build_snapshot_rows(
                 level=normalize_int(entry.get("level")),
                 exp=normalize_int(entry.get("exp")),
                 image_url=str(entry.get("imageUrl", "")).strip(),
+                character_asset_key=extract_asset_key(entry),
             )
         )
     return rows
@@ -291,6 +294,18 @@ def run() -> int:
         config.ranking_request_delay_sec(),
         max_pages,
     )
+
+    db_path = config.sqlite_db_path()
+    if config.navigator_fetch_enabled():
+        asset_keys = collect_asset_keys(ranking)
+        sync_world_ids(
+            db_path,
+            asset_keys,
+            request_delay_sec=config.navigator_request_delay_sec(),
+        )
+    else:
+        logger.info("Navigator world sync skipped (NAVIGATOR_FETCH_ENABLED=false)")
+
     snapshot_rows = build_snapshot_rows(ranking, fetched)
     if not snapshot_rows:
         raise RuntimeError(f"No snapshot rows for level>={min_level}")
@@ -302,7 +317,6 @@ def run() -> int:
         fetched_at,
     )
 
-    db_path = config.sqlite_db_path()
     ranking_day = snap_date
     retention_days = config.snapshot_retention_days()
     retention_cutoff = (
@@ -336,6 +350,8 @@ def run() -> int:
     )
     export_top_n = config.mvp_export_top_n()
 
+    character_meta = load_character_meta(db_path)
+
     mvp_path = export_mvp_json(
         export_snapshots,
         analysis_rows,
@@ -347,6 +363,7 @@ def run() -> int:
         history_days=history_days,
         snapshot_retention_days=retention_days,
         ranking_min_level=min_level,
+        character_meta=character_meta,
     )
 
     logger.info(

@@ -19,6 +19,7 @@ from level_exp import (
 )
 from job_names import format_job_name
 from models import AnalysisRow, SnapshotRow
+from navigator import KNOWN_WORLD_IDS, navigator_character_url
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,12 @@ def _history_cutoff_date(latest_date: str, history_days: int | None) -> str | No
     return cutoff.isoformat()
 
 
+def _character_group_key(row: SnapshotRow) -> str:
+    if row.character_asset_key:
+        return row.character_asset_key
+    return f"name:{row.character_name}"
+
+
 def filter_snapshots_for_history(
     snapshots: list[SnapshotRow],
     *,
@@ -64,22 +71,24 @@ def build_mvp_characters(
     *,
     export_top_n: int | None = None,
     latest_snapshot_date: str | None = None,
+    character_meta: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     if not snapshots:
         return []
 
     latest_date = latest_snapshot_date or max(row.snapshot_date for row in snapshots)
     analysis_by_key = _analysis_lookup(analysis_rows)
-    by_name: dict[str, list[SnapshotRow]] = defaultdict(list)
+    meta = character_meta or {}
+    by_key: dict[str, list[SnapshotRow]] = defaultdict(list)
 
     for row in snapshots:
-        if row.character_name:
-            by_name[row.character_name].append(row)
+        if row.character_name or row.character_asset_key:
+            by_key[_character_group_key(row)].append(row)
 
     characters: list[dict[str, Any]] = []
 
-    for index, (name, rows) in enumerate(
-        sorted(by_name.items(), key=lambda item: item[0].casefold()),
+    for index, (group_key, rows) in enumerate(
+        sorted(by_key.items(), key=lambda item: item[0].casefold()),
         start=1,
     ):
         rows_sorted = sorted(rows, key=lambda row: row.snapshot_date)
@@ -119,8 +128,10 @@ def build_mvp_characters(
         )
 
         level_pct = calculate_level_exp_percent(latest.level, latest.exp)
-        characters.append(
-            {
+        asset_key = latest.character_asset_key
+        world_id = meta.get(asset_key, "") if asset_key else ""
+        name = latest.character_name
+        character_payload: dict[str, Any] = {
                 "id": index,
                 "rank": latest.rank,
                 "name": name,
@@ -137,7 +148,12 @@ def build_mvp_characters(
                 "imageUrl": latest.image_url or f"https://placehold.co/96x96?text={index}",
                 "history": history,
             }
-        )
+        if asset_key:
+            character_payload["characterAssetKey"] = asset_key
+            character_payload["navigatorUrl"] = navigator_character_url(asset_key)
+        if world_id:
+            character_payload["worldId"] = world_id
+        characters.append(character_payload)
 
     characters.sort(key=lambda item: item["rank"])
     if export_top_n is not None:
@@ -159,6 +175,7 @@ def build_mvp_payload(
     latest_snapshot_date: str | None = None,
     history_days: int | None = None,
     snapshot_retention_days: int | None = None,
+    character_meta: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     latest_date = latest_snapshot_date or (
         max(row.snapshot_date for row in snapshots) if snapshots else ""
@@ -168,6 +185,7 @@ def build_mvp_payload(
         analysis_rows,
         export_top_n=export_top_n,
         latest_snapshot_date=latest_date or None,
+        character_meta=character_meta,
     )
     snapshot_dates = sorted({row.snapshot_date for row in snapshots})
 
@@ -190,6 +208,7 @@ def build_mvp_payload(
                 str(level): EXP_TO_NEXT_LEVEL[level]
                 for level in sorted(EXP_TO_NEXT_LEVEL)
             },
+            "worldIds": list(KNOWN_WORLD_IDS),
         },
         "characters": characters,
     }
@@ -207,6 +226,7 @@ def export_mvp_json(
     latest_snapshot_date: str | None = None,
     history_days: int | None = None,
     snapshot_retention_days: int | None = None,
+    character_meta: dict[str, str] | None = None,
 ) -> Path:
     rows = analysis_rows if analysis_rows is not None else build_analysis_rows(snapshots)
     payload = build_mvp_payload(
@@ -219,6 +239,7 @@ def export_mvp_json(
         latest_snapshot_date=latest_snapshot_date,
         history_days=history_days,
         snapshot_retention_days=snapshot_retention_days,
+        character_meta=character_meta,
     )
 
     output_path.parent.mkdir(parents=True, exist_ok=True)

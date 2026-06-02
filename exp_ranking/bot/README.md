@@ -40,3 +40,9 @@ python main.py
 | データ取得 | `run_exp_ranking_fetch.bat` |
 | Web | `run_exp_ranking_web.bat` |
 | UIテスト用ダミー増加量 | `run_inject_dummy_gains.bat`（`rankings.json.bak` を作成） |
+
+## サーバー（worldId）
+
+ランキング API の `characterAssetKey` から Navigator API で `Ain` / `Errai` / `Fang` を取得し、`character_meta` テーブルにキャッシュします（初回のみ約 5500 リクエスト、2 回目以降は未登録分のみ）。
+
+- 環境変数: `NAVIGATOR_FETCH_ENABLED`（既定 `true`）、`NAVIGATOR_REQUEST_DELAY_SEC`（既定 `0.35`）
