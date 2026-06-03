@@ -17,6 +17,7 @@ import requests
 
 import config
 from analysis import build_analysis_rows
+from identity import build_name_to_asset_key_from_ranking
 from models import SnapshotRow
 from mvp_export import export_mvp_json, filter_snapshots_for_history
 from navigator import collect_asset_keys, extract_asset_key, sync_world_ids
@@ -388,9 +389,17 @@ def run() -> int:
     ).isoformat()
     deleted_rows = delete_snapshots_before(db_path, retention_cutoff)
 
-    backfilled = backfill_character_asset_keys(db_path)
+    name_to_asset_key = build_name_to_asset_key_from_ranking(ranking)
+    backfilled = backfill_character_asset_keys(
+        db_path,
+        name_to_asset_key=name_to_asset_key,
+    )
     if backfilled:
-        logger.info("Backfilled character_asset_key rows: %s", backfilled)
+        logger.info(
+            "Complemented asset keys from today's ranking: %s names, %s rows",
+            len(name_to_asset_key),
+            backfilled,
+        )
 
     snapshots = load_all_snapshots(db_path)
     if not snapshots:
