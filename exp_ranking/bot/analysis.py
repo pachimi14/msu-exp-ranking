@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from identity import build_name_to_asset_key, resolve_snapshot_identity
 from models import AnalysisRow, SnapshotRow
 from level_exp import (
     calculate_exp_to_250,
@@ -11,11 +12,12 @@ from level_exp import (
 from utils import normalize_int
 
 
-def snapshot_identity_key(row: SnapshotRow) -> str:
+def snapshot_identity_key(
+    row: SnapshotRow,
+    name_to_asset_key: dict[str, str] | None = None,
+) -> str:
     """Stable key across ranking days (prefer asset key over name)."""
-    if row.character_asset_key:
-        return row.character_asset_key
-    return f"name:{row.character_name.casefold()}"
+    return resolve_snapshot_identity(row, name_to_asset_key)
 
 
 def build_analysis_rows(
@@ -30,12 +32,13 @@ def build_analysis_rows(
         key=lambda row: (row.snapshot_date, row.rank),
     )
     ranking_dates = sorted({row.snapshot_date for row in snapshots})
+    name_to_asset_key = build_name_to_asset_key(ordered)
 
     progress_by_date_identity: dict[tuple[str, str], int] = {}
     totals_by_date: dict[str, dict[str, int]] = {}
 
     for row in ordered:
-        identity = snapshot_identity_key(row)
+        identity = snapshot_identity_key(row, name_to_asset_key)
         progress = calculate_progress_toward_250(row.level, row.exp)
         progress_by_date_identity[(row.snapshot_date, identity)] = progress
 
@@ -55,7 +58,7 @@ def build_analysis_rows(
     analysis_rows: list[AnalysisRow] = []
 
     for row in ordered:
-        identity = snapshot_identity_key(row)
+        identity = snapshot_identity_key(row, name_to_asset_key)
         progress = progress_by_date_identity[(row.snapshot_date, identity)]
         prev_date = previous_ranking_date(row.snapshot_date)
 

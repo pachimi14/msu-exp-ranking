@@ -22,8 +22,10 @@ from mvp_export import export_mvp_json, filter_snapshots_for_history
 from navigator import collect_asset_keys, extract_asset_key, sync_world_ids
 from sqlite_storage import (
     append_snapshots,
+    backfill_character_asset_keys,
     checkpoint_db,
     count_character_meta,
+    count_snapshot_dates,
     delete_snapshots_before,
     export_character_meta_file,
     hydrate_character_meta_from_json,
@@ -32,6 +34,7 @@ from sqlite_storage import (
     init_db,
     load_all_snapshots,
     load_character_meta,
+    merge_ranking_databases,
 )
 from utils import normalize_int
 
@@ -307,6 +310,15 @@ def run() -> int:
     meta_json_path = config.character_meta_json_path()
     init_db(db_path)
 
+    legacy_db_path = db_path.parent / "ranking.legacy.db"
+    if legacy_db_path.exists():
+        merged = merge_ranking_databases(db_path, legacy_db_path)
+        if merged:
+            logger.info(
+                "Ranking snapshot days after legacy merge: %s",
+                count_snapshot_dates(db_path),
+            )
+
     import_character_meta_file(db_path, meta_json_path)
     cached_meta = count_character_meta(db_path)
     logger.info("character_meta in DB after file import: %s with worldId", cached_meta)
@@ -362,9 +374,21 @@ def run() -> int:
     ).isoformat()
     deleted_rows = delete_snapshots_before(db_path, retention_cutoff)
 
+    backfilled = backfill_character_asset_keys(db_path)
+    if backfilled:
+        logger.info("Backfilled character_asset_key rows: %s", backfilled)
+
     snapshots = load_all_snapshots(db_path)
     if not snapshots:
         raise RuntimeError("No snapshot rows loaded from SQLite")
+
+    snapshot_days = count_snapshot_dates(db_path)
+    logger.info("Ranking snapshot days in DB: %s", snapshot_days)
+    if snapshot_days < 2:
+        logger.warning(
+            "Fewer than 2 snapshot days; daily/weekly/monthly gains will be 0 "
+            "until another ranking day is stored."
+        )
 
     # MVP は今回保存したランキング日（UTC）を表示
     latest_date = ranking_day

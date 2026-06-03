@@ -393,3 +393,93 @@ def latest_snapshot_date(db_path: Path) -> str | None:
             "SELECT MAX(snapshot_date) FROM ranking_snapshot"
         ).fetchone()
     return str(row[0]) if row and row[0] else None
+
+
+def count_snapshot_dates(db_path: Path) -> int:
+    if not db_path.exists():
+        return 0
+    init_db(db_path)
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT COUNT(DISTINCT snapshot_date) FROM ranking_snapshot"
+        ).fetchone()
+    return int(row[0]) if row else 0
+
+
+def backfill_character_asset_keys(db_path: Path) -> int:
+    """Fill missing asset keys on older rows using the newest key per character name."""
+    from identity import build_name_to_asset_key
+
+    snapshots = load_all_snapshots(db_path)
+    if not snapshots:
+        return 0
+
+    name_to_key = build_name_to_asset_key(snapshots)
+    if not name_to_key:
+        return 0
+
+    updated = 0
+    with sqlite3.connect(db_path) as conn:
+        for row in snapshots:
+            if (row.character_asset_key or "").strip():
+                continue
+            asset_key = name_to_key.get(row.character_name.casefold())
+            if not asset_key:
+                continue
+            cursor = conn.execute(
+                """
+                UPDATE ranking_snapshot
+                SET character_asset_key = ?
+                WHERE snapshot_date = ? AND rank = ?
+                  AND (character_asset_key IS NULL OR character_asset_key = '')
+                """,
+                (asset_key, row.snapshot_date, row.rank),
+            )
+            updated += cursor.rowcount
+        conn.commit()
+
+    if updated:
+        logger.info("Backfilled character_asset_key on %s snapshot rows", updated)
+    return updated
+
+
+def merge_ranking_databases(primary_path: Path, secondary_path: Path) -> int:
+    """Copy missing snapshot rows from a legacy DB into the primary DB."""
+    if not secondary_path.exists():
+        return 0
+
+    init_db(primary_path)
+    init_db(secondary_path)
+
+    with sqlite3.connect(primary_path) as conn:
+        before = count_snapshot_dates(primary_path)
+        conn.execute("ATTACH DATABASE ? AS legacy", (str(secondary_path.resolve()),))
+        cursor = conn.execute(
+            """
+            INSERT OR IGNORE INTO ranking_snapshot (
+                snapshot_date, rank, rank_fluctuation, character_name,
+                class_code, job_code, level, exp, image_url,
+                character_asset_key, fetched_at
+            )
+            SELECT
+                snapshot_date, rank, rank_fluctuation, character_name,
+                class_code, job_code, level, exp, image_url,
+                character_asset_key, fetched_at
+            FROM legacy.ranking_snapshot
+            """
+        )
+        merged = cursor.rowcount
+        conn.execute("DETACH DATABASE legacy")
+        conn.commit()
+        after = count_snapshot_dates(primary_path)
+
+    if merged:
+        logger.info(
+            "Merged legacy ranking DB: inserted=%s snapshot_days %s->%s (%s -> %s)",
+            merged,
+            before,
+            after,
+            secondary_path,
+            primary_path,
+        )
+    return merged

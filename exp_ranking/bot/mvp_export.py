@@ -9,7 +9,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from analysis import build_analysis_rows, snapshot_identity_key
+from analysis import build_analysis_rows
+from identity import build_name_to_asset_key, resolve_snapshot_identity
 from level_exp import (
     EXP_TO_NEXT_LEVEL,
     TARGET_TOTAL_EXP_250,
@@ -47,10 +48,6 @@ def _history_cutoff_date(latest_date: str, history_days: int | None) -> str | No
     return cutoff.isoformat()
 
 
-def _character_group_key(row: SnapshotRow) -> str:
-    return snapshot_identity_key(row)
-
-
 def filter_snapshots_for_history(
     snapshots: list[SnapshotRow],
     *,
@@ -77,11 +74,14 @@ def build_mvp_characters(
     latest_date = latest_snapshot_date or max(row.snapshot_date for row in snapshots)
     analysis_by_key = _analysis_lookup(analysis_rows)
     meta = character_meta or {}
+    name_to_asset_key = build_name_to_asset_key(snapshots)
     by_key: dict[str, list[SnapshotRow]] = defaultdict(list)
 
     for row in snapshots:
         if row.character_name or row.character_asset_key:
-            by_key[_character_group_key(row)].append(row)
+            group_key = resolve_snapshot_identity(row, name_to_asset_key)
+            if group_key:
+                by_key[group_key].append(row)
 
     characters: list[dict[str, Any]] = []
 
@@ -100,7 +100,7 @@ def build_mvp_characters(
         history: list[dict[str, Any]] = []
         for snap in rows_sorted:
             analysis = analysis_by_key.get((snap.snapshot_date, snap.rank))
-            daily_gain = 0
+            daily_gain: int | None = None
             if analysis and analysis.daily_exp_gain is not None:
                 daily_gain = analysis.daily_exp_gain
 
@@ -115,14 +115,19 @@ def build_mvp_characters(
                 }
             )
 
-        daily_gains = [point["dailyGain"] for point in history]
+        daily_gains = [
+            point["dailyGain"]
+            for point in history
+            if point.get("dailyGain") is not None
+        ]
         weekly_gain = sum(daily_gains[-7:]) if daily_gains else 0
         monthly_gain = sum(daily_gains[-30:]) if daily_gains else 0
-        latest_daily_gain = (
-            latest_analysis.daily_exp_gain
-            if latest_analysis and latest_analysis.daily_exp_gain is not None
-            else (daily_gains[-1] if daily_gains else 0)
-        )
+        if latest_analysis and latest_analysis.daily_exp_gain is not None:
+            latest_daily_gain = latest_analysis.daily_exp_gain
+        elif daily_gains:
+            latest_daily_gain = daily_gains[-1]
+        else:
+            latest_daily_gain = 0
 
         total_exp = (
             latest_analysis.total_exp_from_240

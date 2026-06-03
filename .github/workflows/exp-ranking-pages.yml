@@ -47,11 +47,23 @@ jobs:
           restore-keys: |
             exp-ranking-data-v3-${{ github.repository }}-meta
 
+      - name: Restore legacy ranking database cache
+        uses: actions/cache/restore@v4
+        with:
+          path: exp_ranking/bot/data/ranking.legacy.db
+          key: exp-ranking-db-v2-${{ github.repository }}
+          restore-keys: |
+            exp-ranking-db-v2-${{ github.repository }}
+            exp-ranking-db-${{ github.repository }}
+
       - name: Log cache restore
         run: |
           echo "cache-hit=${{ steps.ranking_db_cache.outputs.cache-hit }}"
           echo "cache-primary-key=${{ steps.ranking_db_cache.outputs.cache-primary-key }}"
           ls -la exp_ranking/bot/data/ || true
+          if [ -f exp_ranking/bot/data/ranking.legacy.db ]; then
+            echo "legacy-db-bytes=$(wc -c < exp_ranking/bot/data/ranking.legacy.db)"
+          fi
 
       - name: Set up Python
         uses: actions/setup-python@v5

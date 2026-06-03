@@ -1,6 +1,7 @@
 logs/
 data/*.db
 data/*.sqlite3
+data/ranking.legacy.db
 data/character_meta.json
 !data/.gitkeep
 .venv/
