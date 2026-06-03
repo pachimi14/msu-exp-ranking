@@ -15,13 +15,15 @@ on:
       - ".github/workflows/exp-ranking-pages.yml"
       - "README.md"
   schedule:
-    # UTC 00:15 ≒ JST 09:15 (after ranking day rollover at JST 09:00)
-    - cron: "15 0 * * *"
+    # UTC 00:05 ≒ JST 09:05 (ranking day resets JST 09:00; job waits until 09:05 if early)
+    - cron: "5 0 * * *"
+    # UTC 00:25 ≒ JST 09:25 fallback when GitHub delays the primary schedule
+    - cron: "25 0 * * *"
   workflow_dispatch:
 
 concurrency:
   group: exp-ranking-pages
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'push' }}
 
 permissions:
   contents: read
@@ -104,6 +106,8 @@ jobs:
           HYDRATE_META_FROM_PAGES: "true"
           MVP_PAGES_RANKINGS_URL: https://pachimi14.github.io/msu-exp-ranking/data/rankings.json
           IMPORT_SNAPSHOTS_JSON: data/seed/rankings_seed.json
+          ENFORCE_JST_FETCH_WINDOW: ${{ github.event_name == 'schedule' && 'true' || '' }}
+          SKIP_FETCH_IF_RANKING_DAY_EXISTS: ${{ github.event_name == 'schedule' && 'true' || '' }}
         run: python main.py
 
       - name: Count navigator meta for cache key

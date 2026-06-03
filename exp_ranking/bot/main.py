@@ -18,6 +18,7 @@ import requests
 import config
 from analysis import build_analysis_rows
 from identity import build_name_to_asset_key_from_ranking
+from jst_schedule import wait_until_jst_fetch_window
 from models import SnapshotRow
 from mvp_export import export_mvp_json, filter_snapshots_for_history
 from navigator import collect_asset_keys, extract_asset_key, sync_world_ids
@@ -27,16 +28,18 @@ from sqlite_storage import (
     checkpoint_db,
     count_character_meta,
     count_snapshot_dates,
+    count_snapshots_for_date,
     delete_snapshots_before,
     export_character_meta_file,
+    has_snapshots_for_date,
     hydrate_character_meta_from_json,
     hydrate_character_meta_from_url,
     import_character_meta_file,
     init_db,
-    load_all_snapshots,
-    load_character_meta,
     import_snapshots_from_mvp_json,
     list_snapshot_dates,
+    load_all_snapshots,
+    load_character_meta,
     merge_ranking_databases,
     snapshot_dates_in_mvp_json,
 )
@@ -291,6 +294,10 @@ def build_snapshot_rows(
 def run() -> int:
     config.load_env_file()
     logger = logging.getLogger(__name__)
+
+    if config.enforce_jst_fetch_window():
+        wait_until_jst_fetch_window(logger)
+
     fetched = now_utc()
     snap_date = snapshot_date_ranking(fetched)
     min_level = config.ranking_min_level()
@@ -301,12 +308,6 @@ def run() -> int:
         snap_date,
         fetched.astimezone(JST).strftime("%Y-%m-%d %H:%M:%S"),
         min_level,
-    )
-
-    ranking = fetch_ranking_min_level(
-        min_level,
-        config.ranking_request_delay_sec(),
-        max_pages,
     )
 
     db_path = config.sqlite_db_path()
@@ -363,31 +364,65 @@ def run() -> int:
                 pages_hydrated,
             )
 
-    if config.navigator_fetch_enabled():
-        asset_keys = collect_asset_keys(ranking)
+    skip_fetch = (
+        config.skip_fetch_if_ranking_day_exists()
+        and has_snapshots_for_date(db_path, snap_date)
+    )
+    sqlite_saved = 0
+    sqlite_skipped = 0
+    ranking_top_n = count_snapshots_for_date(db_path, snap_date)
+
+    if skip_fetch:
         logger.info(
-            "Navigator sync starting: %s ranking keys, %s cached worldIds in DB",
-            len(asset_keys),
-            cached_meta,
-        )
-        sync_world_ids(
-            db_path,
-            asset_keys,
-            request_delay_sec=config.navigator_request_delay_sec(),
+            "Skipping ranking API fetch; snapshot already stored for %s (%s rows)",
+            snap_date,
+            ranking_top_n,
         )
     else:
-        logger.info("Navigator world sync skipped (NAVIGATOR_FETCH_ENABLED=false)")
+        ranking = fetch_ranking_min_level(
+            min_level,
+            config.ranking_request_delay_sec(),
+            max_pages,
+        )
 
-    snapshot_rows = build_snapshot_rows(ranking, fetched)
-    if not snapshot_rows:
-        raise RuntimeError(f"No snapshot rows for level>={min_level}")
+        if config.navigator_fetch_enabled():
+            asset_keys = collect_asset_keys(ranking)
+            logger.info(
+                "Navigator sync starting: %s ranking keys, %s cached worldIds in DB",
+                len(asset_keys),
+                cached_meta,
+            )
+            sync_world_ids(
+                db_path,
+                asset_keys,
+                request_delay_sec=config.navigator_request_delay_sec(),
+            )
+        else:
+            logger.info("Navigator world sync skipped (NAVIGATOR_FETCH_ENABLED=false)")
 
-    fetched_at = fetched.isoformat(timespec="seconds")
-    sqlite_saved, sqlite_skipped = append_snapshots(
-        config.sqlite_db_path(),
-        snapshot_rows,
-        fetched_at,
-    )
+        snapshot_rows = build_snapshot_rows(ranking, fetched)
+        if not snapshot_rows:
+            raise RuntimeError(f"No snapshot rows for level>={min_level}")
+
+        ranking_top_n = len(snapshot_rows)
+        fetched_at = fetched.isoformat(timespec="seconds")
+        sqlite_saved, sqlite_skipped = append_snapshots(
+            db_path,
+            snapshot_rows,
+            fetched_at,
+        )
+
+        name_to_asset_key = build_name_to_asset_key_from_ranking(ranking)
+        backfilled = backfill_character_asset_keys(
+            db_path,
+            name_to_asset_key=name_to_asset_key,
+        )
+        if backfilled:
+            logger.info(
+                "Complemented asset keys from today's ranking: %s names, %s rows",
+                len(name_to_asset_key),
+                backfilled,
+            )
 
     ranking_day = snap_date
     retention_days = config.snapshot_retention_days()
@@ -395,18 +430,6 @@ def run() -> int:
         date.fromisoformat(ranking_day) - timedelta(days=retention_days - 1)
     ).isoformat()
     deleted_rows = delete_snapshots_before(db_path, retention_cutoff)
-
-    name_to_asset_key = build_name_to_asset_key_from_ranking(ranking)
-    backfilled = backfill_character_asset_keys(
-        db_path,
-        name_to_asset_key=name_to_asset_key,
-    )
-    if backfilled:
-        logger.info(
-            "Complemented asset keys from today's ranking: %s names, %s rows",
-            len(name_to_asset_key),
-            backfilled,
-        )
 
     snapshots = load_all_snapshots(db_path)
     if not snapshots:
@@ -450,7 +473,7 @@ def run() -> int:
         config.mvp_json_output_path(),
         updated_at=fetched,
         export_top_n=export_top_n,
-        ranking_top_n=len(snapshot_rows),
+        ranking_top_n=ranking_top_n,
         latest_snapshot_date=latest_date,
         history_days=history_days,
         snapshot_retention_days=retention_days,
@@ -467,9 +490,9 @@ def run() -> int:
     )
 
     logger.info(
-        "Completed: fetched=%s sqlite_saved=%s sqlite_skipped=%s "
+        "Completed: ranking_top_n=%s sqlite_saved=%s sqlite_skipped=%s "
         "retention_days=%s deleted_old=%s analysis_rows=%s mvp_json=%s",
-        len(snapshot_rows),
+        ranking_top_n,
         sqlite_saved,
         sqlite_skipped,
         retention_days,

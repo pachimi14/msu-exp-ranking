@@ -130,6 +130,16 @@ def should_import_snapshot_seed(db_path: Path, seed_path: Path) -> bool:
     return count_snapshot_dates(db_path) < len(seed_dates)
 
 
+def enforce_jst_fetch_window() -> bool:
+    raw = os.environ.get("ENFORCE_JST_FETCH_WINDOW", "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
+def skip_fetch_if_ranking_day_exists() -> bool:
+    raw = os.environ.get("SKIP_FETCH_IF_RANKING_DAY_EXISTS", "").strip().lower()
+    return raw in ("1", "true", "yes", "on")
+
+
 def resolve_snapshot_import_path(db_path: Path) -> Path | None:
     """Pick a rankings.json seed when DB is missing snapshot days from that file."""
     candidates: list[Path] = [snapshot_seed_json_path()]

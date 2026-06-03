@@ -41,7 +41,7 @@ git push -u origin main
 
 | トリガー | 内容 |
 |----------|------|
-| 毎日 UTC 00:15（JST 9:15 頃） | API 取得 → JSON → ビルド → デプロイ |
+| 毎日 UTC 00:05 / 00:25（JST 9:05 / 9:25） | API 取得 → JSON → ビルド → デプロイ |
 | `main` への push（`exp_ranking/` 変更時） | 同上 |
 | **Actions** タブの **Run workflow** | 手動実行 |
 
@@ -58,8 +58,14 @@ push 済みのワークフロー [`.github/workflows/exp-ranking-pages.yml`](../
 | 3 | `rankings.json` を生成 |
 | 4 | Web をビルドして **GitHub Pages** を更新 |
 
-**スケジュール**: 毎日 **UTC 00:15**（おおよそ **JST 9:15**）  
-ランキング日の切り替え（JST 9:00）のあとに1回走る想定です。
+**スケジュール**（ランキング日リセット **JST 9:00** のあと）:
+
+| cron (UTC) | JST | 役割 |
+|------------|-----|------|
+| `5 0 * * *` | **9:05** | 本番取得（ジョブ内で 9:05 まで待機する場合あり） |
+| `25 0 * * *` | **9:25** | 遅延時のフォールバック（当日分が既にあれば API 取得スキップ） |
+
+`push` では待機・スキップは行いません。
 
 **手動更新**: [Actions](https://github.com/pachimi14/msu-exp-ranking/actions) → **EXP Ranking Pages** → **Run workflow**
 
@@ -71,7 +77,7 @@ push 済みのワークフロー [`.github/workflows/exp-ranking-pages.yml`](../
 2. 成功ログの **Fetch ranking and export JSON** に `sqlite_saved=...` があるか  
 3. サイトの「最新 ○○-○○-○○」日付が変わるか（翌日以降）
 
-無料プランではスケジュール実行が **数分〜最大1時間程度遅れる** ことがあります。
+GitHub の schedule は数分遅れることがあります。9:25 JST のフォールバックと、ジョブ開始が早すぎる場合の **JST 9:05 までの待機**で、リセット後の取得に寄せています。それでも午後にずれる場合は **Run workflow** で手動実行してください。
 
 ### 取得条件や時刻を変えたいとき
 

@@ -395,6 +395,30 @@ def latest_snapshot_date(db_path: Path) -> str | None:
     return str(row[0]) if row and row[0] else None
 
 
+def has_snapshots_for_date(db_path: Path, snapshot_date: str) -> bool:
+    if not snapshot_date or not db_path.exists():
+        return False
+    init_db(db_path)
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT 1 FROM ranking_snapshot WHERE snapshot_date = ? LIMIT 1",
+            (snapshot_date,),
+        ).fetchone()
+    return row is not None
+
+
+def count_snapshots_for_date(db_path: Path, snapshot_date: str) -> int:
+    if not snapshot_date or not db_path.exists():
+        return 0
+    init_db(db_path)
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM ranking_snapshot WHERE snapshot_date = ?",
+            (snapshot_date,),
+        ).fetchone()
+    return int(row[0]) if row else 0
+
+
 def list_snapshot_dates(db_path: Path) -> list[str]:
     if not db_path.exists():
         return []
