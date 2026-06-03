@@ -147,6 +147,56 @@ def load_all_snapshots(db_path: Path) -> list[SnapshotRow]:
     ]
 
 
+def count_character_meta(db_path: Path) -> int:
+    if not db_path.exists():
+        return 0
+    init_db(db_path)
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM character_meta WHERE world_id != ''"
+        ).fetchone()
+    return int(row[0]) if row else 0
+
+
+def hydrate_character_meta_from_json(db_path: Path, json_path: Path) -> int:
+    """Import worldId from an existing rankings.json into character_meta."""
+    import json
+
+    if not json_path.exists():
+        return 0
+
+    try:
+        payload = json.loads(json_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+
+    characters = payload.get("characters")
+    if not isinstance(characters, list):
+        return 0
+
+    from datetime import datetime, timezone
+
+    updated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    imported = 0
+    for character in characters:
+        if not isinstance(character, dict):
+            continue
+        asset_key = str(character.get("characterAssetKey") or "").strip()
+        world_id = str(character.get("worldId") or "").strip()
+        if not asset_key or not world_id:
+            continue
+        upsert_character_meta(db_path, asset_key, world_id, updated_at)
+        imported += 1
+
+    if imported:
+        logger.info(
+            "Hydrated character_meta from JSON: %s rows from %s",
+            imported,
+            json_path,
+        )
+    return imported
+
+
 def load_character_meta(db_path: Path) -> dict[str, str]:
     if not db_path.exists():
         return {}

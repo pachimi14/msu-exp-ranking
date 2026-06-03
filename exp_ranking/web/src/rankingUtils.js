@@ -151,6 +151,9 @@ export function formatLevelExp(character) {
 
 export function getGainAmount(character, period) {
   if (period === "daily") {
+    if (character.dailyGain != null) {
+      return character.dailyGain;
+    }
     return character.history?.at(-1)?.dailyGain ?? 0;
   }
   if (period === "weekly") {

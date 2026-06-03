@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from analysis import build_analysis_rows
+from analysis import build_analysis_rows, snapshot_identity_key
 from level_exp import (
     EXP_TO_NEXT_LEVEL,
     TARGET_TOTAL_EXP_250,
@@ -48,9 +48,7 @@ def _history_cutoff_date(latest_date: str, history_days: int | None) -> str | No
 
 
 def _character_group_key(row: SnapshotRow) -> str:
-    if row.character_asset_key:
-        return row.character_asset_key
-    return f"name:{row.character_name}"
+    return snapshot_identity_key(row)
 
 
 def filter_snapshots_for_history(
@@ -120,6 +118,11 @@ def build_mvp_characters(
         daily_gains = [point["dailyGain"] for point in history]
         weekly_gain = sum(daily_gains[-7:]) if daily_gains else 0
         monthly_gain = sum(daily_gains[-30:]) if daily_gains else 0
+        latest_daily_gain = (
+            latest_analysis.daily_exp_gain
+            if latest_analysis and latest_analysis.daily_exp_gain is not None
+            else (daily_gains[-1] if daily_gains else 0)
+        )
 
         total_exp = (
             latest_analysis.total_exp_from_240
@@ -143,6 +146,7 @@ def build_mvp_characters(
                 "expToNextLevel": exp_required_for_level(latest.level),
                 "totalExpFrom240": total_exp,
                 "expTo250": latest_analysis.exp_to_250 if latest_analysis else 0,
+                "dailyGain": latest_daily_gain,
                 "weeklyGain": weekly_gain,
                 "monthlyGain": monthly_gain,
                 "imageUrl": latest.image_url or f"https://placehold.co/96x96?text={index}",

@@ -143,6 +143,10 @@ def sync_world_ids(
 
         try:
             world_id = fetch_world_id(session, asset_key)
+            if not world_id:
+                failed += 1
+                logger.warning("Empty worldId for %s (not cached)", asset_key)
+                continue
             upsert_character_meta(db_path, asset_key, world_id, updated_at)
             fetched += 1
         except Exception:

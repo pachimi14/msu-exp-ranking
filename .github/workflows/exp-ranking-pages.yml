@@ -39,11 +39,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Restore ranking database cache
+        id: ranking_db_cache
         uses: actions/cache@v4
         with:
           path: exp_ranking/bot/data/ranking.db
-          key: exp-ranking-db-${{ github.repository }}
+          key: exp-ranking-db-v2-${{ github.repository }}
           restore-keys: |
+            exp-ranking-db-v2-${{ github.repository }}
             exp-ranking-db-${{ github.repository }}
 
       - name: Set up Python
@@ -71,6 +73,13 @@ jobs:
           NAVIGATOR_REQUEST_DELAY_SEC: "0.35"
           NAVIGATOR_FETCH_ENABLED: "true"
         run: python main.py
+
+      - name: Save ranking database cache
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: exp_ranking/bot/data/ranking.db
+          key: exp-ranking-db-v2-${{ github.repository }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v4

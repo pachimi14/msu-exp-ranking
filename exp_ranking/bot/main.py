@@ -22,7 +22,9 @@ from mvp_export import export_mvp_json, filter_snapshots_for_history
 from navigator import collect_asset_keys, extract_asset_key, sync_world_ids
 from sqlite_storage import (
     append_snapshots,
+    count_character_meta,
     delete_snapshots_before,
+    hydrate_character_meta_from_json,
     load_all_snapshots,
     load_character_meta,
 )
@@ -296,6 +298,16 @@ def run() -> int:
     )
 
     db_path = config.sqlite_db_path()
+    json_path = config.mvp_json_output_path()
+    cached_meta = count_character_meta(db_path)
+    logger.info("character_meta in DB before sync: %s with worldId", cached_meta)
+
+    if json_path.exists() and cached_meta == 0:
+        hydrated = hydrate_character_meta_from_json(db_path, json_path)
+        if hydrated:
+            cached_meta = count_character_meta(db_path)
+            logger.info("character_meta after JSON hydrate: %s", cached_meta)
+
     if config.navigator_fetch_enabled():
         asset_keys = collect_asset_keys(ranking)
         sync_world_ids(

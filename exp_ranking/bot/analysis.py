@@ -11,6 +11,13 @@ from level_exp import (
 from utils import normalize_int
 
 
+def snapshot_identity_key(row: SnapshotRow) -> str:
+    """Stable key across ranking days (prefer asset key over name)."""
+    if row.character_asset_key:
+        return row.character_asset_key
+    return f"name:{row.character_name.casefold()}"
+
+
 def build_analysis_rows(
     snapshots: list[SnapshotRow],
     benchmark_character: str = "pachimi",
@@ -22,25 +29,41 @@ def build_analysis_rows(
         snapshots,
         key=lambda row: (row.snapshot_date, row.rank),
     )
+    ranking_dates = sorted({row.snapshot_date for row in snapshots})
 
-    totals_by_character: dict[str, list[tuple[str, int]]] = {}
+    progress_by_date_identity: dict[tuple[str, str], int] = {}
     totals_by_date: dict[str, dict[str, int]] = {}
+
+    for row in ordered:
+        identity = snapshot_identity_key(row)
+        progress = calculate_progress_toward_250(row.level, row.exp)
+        progress_by_date_identity[(row.snapshot_date, identity)] = progress
+
+        total_exp = calculate_total_exp_from_240(row.level, row.exp)
+        date_totals = totals_by_date.setdefault(row.snapshot_date, {})
+        date_totals[row.character_name.casefold()] = total_exp
+
+    def previous_ranking_date(snapshot_date: str) -> str | None:
+        try:
+            index = ranking_dates.index(snapshot_date)
+        except ValueError:
+            return None
+        if index == 0:
+            return None
+        return ranking_dates[index - 1]
 
     analysis_rows: list[AnalysisRow] = []
 
     for row in ordered:
-        total_exp = calculate_total_exp_from_240(row.level, row.exp)
-        progress = calculate_progress_toward_250(row.level, row.exp)
-        character_key = row.character_name.casefold()
+        identity = snapshot_identity_key(row)
+        progress = progress_by_date_identity[(row.snapshot_date, identity)]
+        prev_date = previous_ranking_date(row.snapshot_date)
 
-        history = totals_by_character.setdefault(character_key, [])
         daily_gain: int | None = None
-        if history:
-            daily_gain = progress - history[-1][1]
-        history.append((row.snapshot_date, progress))
-
-        date_totals = totals_by_date.setdefault(row.snapshot_date, {})
-        date_totals[character_key] = total_exp
+        if prev_date:
+            prev_progress = progress_by_date_identity.get((prev_date, identity))
+            if prev_progress is not None:
+                daily_gain = progress - prev_progress
 
         analysis_rows.append(
             AnalysisRow(
@@ -49,7 +72,7 @@ def build_analysis_rows(
                 character_name=row.character_name,
                 level=row.level,
                 exp=row.exp,
-                total_exp_from_240=total_exp,
+                total_exp_from_240=calculate_total_exp_from_240(row.level, row.exp),
                 daily_exp_gain=daily_gain,
                 exp_to_250=calculate_exp_to_250(row.level, row.exp),
                 diff_from_pachimi=None,
