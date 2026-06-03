@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 from identity import build_name_to_asset_key, resolve_snapshot_identity
 from models import AnalysisRow, SnapshotRow
 from level_exp import (
@@ -31,7 +33,6 @@ def build_analysis_rows(
         snapshots,
         key=lambda row: (row.snapshot_date, row.rank),
     )
-    ranking_dates = sorted({row.snapshot_date for row in snapshots})
     name_to_asset_key = build_name_to_asset_key(ordered)
 
     progress_by_date_identity: dict[tuple[str, str], int] = {}
@@ -47,13 +48,12 @@ def build_analysis_rows(
         date_totals[row.character_name.casefold()] = total_exp
 
     def previous_ranking_date(snapshot_date: str) -> str | None:
+        """Calendar previous ranking day (UTC), not the previous date stored in DB."""
         try:
-            index = ranking_dates.index(snapshot_date)
+            current = date.fromisoformat(snapshot_date)
         except ValueError:
             return None
-        if index == 0:
-            return None
-        return ranking_dates[index - 1]
+        return (current - timedelta(days=1)).isoformat()
 
     analysis_rows: list[AnalysisRow] = []
 
