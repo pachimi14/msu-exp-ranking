@@ -244,7 +244,7 @@ export default function JobGainRankings({
                   <th className="text-left p-3 w-12" />
                   <th className="text-left p-3">職業内順位</th>
                   <th className="text-left p-3">キャラ</th>
-                  <th className="text-right p-3">Lv / EXP%</th>
+                  <th className="text-right p-3 whitespace-nowrap">Lv / EXP%</th>
                   <th className="text-right p-3">{periodLabel}増加</th>
                   <th className="text-right p-3">レベル順位</th>
                 </tr>
@@ -268,7 +268,9 @@ export default function JobGainRankings({
                       #{character.jobGainRank}
                     </td>
                     <td className="p-3 font-semibold">{character.name}</td>
-                    <td className="p-3 text-right">{formatLevelExp(character)}</td>
+                    <td className="p-3 text-right whitespace-nowrap tabular-nums">
+                      {formatLevelExp(character)}
+                    </td>
                     <td className="p-3 text-right text-emerald-400 font-semibold">
                       +{formatExp(getGainAmount(character, period))}
                     </td>

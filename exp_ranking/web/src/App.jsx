@@ -422,7 +422,7 @@ export default function App() {
                       <th className="text-left p-3">レベル順位</th>
                       <th className="text-left p-3">Character</th>
                       <th className="text-left p-3">Server</th>
-                      <th className="text-right p-3">Lv / EXP%</th>
+                      <th className="text-right p-3 whitespace-nowrap">Lv / EXP%</th>
                       <th className="text-right p-3">Daily</th>
                       <th className="text-right p-3">Weekly</th>
                       <th className="text-right p-3">Monthly</th>
@@ -472,7 +472,9 @@ export default function App() {
                             <span className="text-slate-600">-</span>
                           )}
                         </td>
-                        <td className="p-3 text-right font-medium">{formatLevelExp(character)}</td>
+                        <td className="p-3 text-right font-medium whitespace-nowrap tabular-nums">
+                          {formatLevelExp(character)}
+                        </td>
                         <td
                           className={`p-3 text-right ${
                             sortKey === "daily" ? "text-emerald-400 font-semibold" : ""
