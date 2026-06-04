@@ -154,6 +154,12 @@ def skip_run_if_ranking_day_exists() -> bool:
     return raw not in ("0", "false", "no", "off")
 
 
+def skip_deploy_if_day_captured() -> bool:
+    """When fetch is skipped, also skip CI deploy (export-only on push sets false)."""
+    raw = os.environ.get("SKIP_DEPLOY_IF_DAY_CAPTURED", "true").strip().lower()
+    return raw not in ("0", "false", "no", "off")
+
+
 def skip_run_min_snapshot_rows() -> int:
     raw = os.environ.get("SKIP_RUN_MIN_SNAPSHOT_ROWS", "1000").strip()
     try:

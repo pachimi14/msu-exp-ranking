@@ -19,7 +19,12 @@ import config
 from analysis import build_analysis_rows
 from identity import build_name_to_asset_key_from_ranking
 from jst_schedule import wait_until_jst_fetch_window
-from ranking_day_skip import clear_ranking_day_skip_marker, try_skip_entire_run
+from ranking_day_skip import (
+    clear_ranking_day_skip_marker,
+    log_skip_ranking_fetch_only,
+    should_skip_ranking_fetch,
+    try_skip_entire_run,
+)
 from models import SnapshotRow
 from mvp_export import export_mvp_json, filter_snapshots_for_history
 from navigator import collect_asset_keys, extract_asset_key, sync_world_ids
@@ -341,81 +346,90 @@ def run() -> int:
     if try_skip_entire_run(db_path, snap_date):
         return 0
 
-    logger.info(
-        "MSU ranking bot started (ranking_day=%s UTC, local=%s JST, min_level=%s)",
-        snap_date,
-        fetched.astimezone(JST).strftime("%Y-%m-%d %H:%M:%S"),
-        min_level,
-    )
-
-    import_character_meta_file(db_path, meta_json_path)
-    cached_meta = count_character_meta(db_path)
-    logger.info("character_meta in DB after file import: %s with worldId", cached_meta)
-
-    if json_path.exists():
-        hydrated = hydrate_character_meta_from_json(db_path, json_path)
-        if hydrated:
-            cached_meta = count_character_meta(db_path)
-            logger.info("character_meta after local rankings.json: %s", cached_meta)
-
-    if config.hydrate_meta_from_pages():
-        pages_hydrated = hydrate_character_meta_from_url(
-            db_path, config.pages_rankings_url()
+    skip_ranking_fetch = should_skip_ranking_fetch(db_path, snap_date)
+    if skip_ranking_fetch:
+        log_skip_ranking_fetch_only(db_path, snap_date)
+        ranking_top_n = count_snapshots_for_date(db_path, snap_date)
+        sqlite_saved = 0
+        sqlite_skipped = 0
+    else:
+        logger.info(
+            "MSU ranking bot started (ranking_day=%s UTC, local=%s JST, min_level=%s)",
+            snap_date,
+            fetched.astimezone(JST).strftime("%Y-%m-%d %H:%M:%S"),
+            min_level,
         )
-        if pages_hydrated:
-            cached_meta = count_character_meta(db_path)
+
+        import_character_meta_file(db_path, meta_json_path)
+        cached_meta = count_character_meta(db_path)
+        logger.info("character_meta in DB after file import: %s with worldId", cached_meta)
+
+        if json_path.exists():
+            hydrated = hydrate_character_meta_from_json(db_path, json_path)
+            if hydrated:
+                cached_meta = count_character_meta(db_path)
+                logger.info("character_meta after local rankings.json: %s", cached_meta)
+
+        if config.hydrate_meta_from_pages():
+            pages_hydrated = hydrate_character_meta_from_url(
+                db_path, config.pages_rankings_url()
+            )
+            if pages_hydrated:
+                cached_meta = count_character_meta(db_path)
+                logger.info(
+                    "character_meta after Pages hydrate: %s (imported %s)",
+                    cached_meta,
+                    pages_hydrated,
+                )
+
+        ranking = fetch_ranking_min_level(
+            min_level,
+            config.ranking_request_delay_sec(),
+            max_pages,
+        )
+
+        if config.navigator_fetch_enabled():
+            asset_keys = collect_asset_keys(ranking)
             logger.info(
-                "character_meta after Pages hydrate: %s (imported %s)",
+                "Navigator sync starting: %s ranking keys, %s cached worldIds in DB",
+                len(asset_keys),
                 cached_meta,
-                pages_hydrated,
+            )
+            sync_world_ids(
+                db_path,
+                asset_keys,
+                request_delay_sec=config.navigator_request_delay_sec(),
+            )
+        else:
+            logger.info("Navigator world sync skipped (NAVIGATOR_FETCH_ENABLED=false)")
+
+        fetched = now_utc()
+        snap_date = snapshot_date_ranking(fetched)
+        snapshot_rows = build_snapshot_rows(ranking, fetched)
+        if not snapshot_rows:
+            raise RuntimeError(f"No snapshot rows for level>={min_level}")
+
+        ranking_top_n = len(snapshot_rows)
+        fetched_at = fetched.isoformat(timespec="seconds")
+        sqlite_saved, sqlite_skipped = append_snapshots(
+            db_path,
+            snapshot_rows,
+            fetched_at,
+        )
+
+        name_to_asset_key = build_name_to_asset_key_from_ranking(ranking)
+        backfilled = backfill_character_asset_keys(
+            db_path,
+            name_to_asset_key=name_to_asset_key,
+        )
+        if backfilled:
+            logger.info(
+                "Complemented asset keys from today's ranking: %s names, %s rows",
+                len(name_to_asset_key),
+                backfilled,
             )
 
-    ranking = fetch_ranking_min_level(
-        min_level,
-        config.ranking_request_delay_sec(),
-        max_pages,
-    )
-
-    if config.navigator_fetch_enabled():
-        asset_keys = collect_asset_keys(ranking)
-        logger.info(
-            "Navigator sync starting: %s ranking keys, %s cached worldIds in DB",
-            len(asset_keys),
-            cached_meta,
-        )
-        sync_world_ids(
-            db_path,
-            asset_keys,
-            request_delay_sec=config.navigator_request_delay_sec(),
-        )
-    else:
-        logger.info("Navigator world sync skipped (NAVIGATOR_FETCH_ENABLED=false)")
-
     fetched = now_utc()
-    snap_date = snapshot_date_ranking(fetched)
-    snapshot_rows = build_snapshot_rows(ranking, fetched)
-    if not snapshot_rows:
-        raise RuntimeError(f"No snapshot rows for level>={min_level}")
-
-    ranking_top_n = len(snapshot_rows)
-    fetched_at = fetched.isoformat(timespec="seconds")
-    sqlite_saved, sqlite_skipped = append_snapshots(
-        db_path,
-        snapshot_rows,
-        fetched_at,
-    )
-
-    name_to_asset_key = build_name_to_asset_key_from_ranking(ranking)
-    backfilled = backfill_character_asset_keys(
-        db_path,
-        name_to_asset_key=name_to_asset_key,
-    )
-    if backfilled:
-        logger.info(
-            "Complemented asset keys from today's ranking: %s names, %s rows",
-            len(name_to_asset_key),
-            backfilled,
-        )
 
     ranking_day = snap_date
     retention_days = config.snapshot_retention_days()

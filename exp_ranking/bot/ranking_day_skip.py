@@ -38,16 +38,17 @@ def ranking_day_already_captured(db_path: Path, snapshot_date: str) -> bool:
     )
 
 
-def should_skip_entire_run(db_path: Path, snapshot_date: str) -> bool:
+def should_skip_ranking_fetch(db_path: Path, snapshot_date: str) -> bool:
     if not config.skip_run_if_ranking_day_exists():
         return False
     return ranking_day_already_captured(db_path, snapshot_date)
 
 
 def try_skip_entire_run(db_path: Path, snapshot_date: str) -> bool:
-    """Return True when the job should exit without fetch/build/deploy."""
-    clear_ranking_day_skip_marker()
-    if not should_skip_entire_run(db_path, snapshot_date):
+    """Return True when fetch/nav/deploy should all be skipped (marker written)."""
+    if not should_skip_ranking_fetch(db_path, snapshot_date):
+        return False
+    if not config.skip_deploy_if_day_captured():
         return False
 
     rows = count_snapshots_for_date(db_path, snapshot_date)
@@ -60,3 +61,14 @@ def try_skip_entire_run(db_path: Path, snapshot_date: str) -> bool:
         config.skip_run_min_snapshot_rows(),
     )
     return True
+
+
+def log_skip_ranking_fetch_only(db_path: Path, snapshot_date: str) -> None:
+    rows = count_snapshots_for_date(db_path, snapshot_date)
+    logger.info(
+        "Ranking day %s already captured (%s rows >= %s); "
+        "skipping ranking fetch and Navigator (re-export from SQLite)",
+        snapshot_date,
+        rows,
+        config.skip_run_min_snapshot_rows(),
+    )
